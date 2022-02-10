@@ -1,0 +1,100 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(MASS)
+library(ggplot2)
+library(vtable)
+library(stargazer)
+library(estimatr)
+library(dplyr)
+library(tidyr)
+library(here)
+
+### Directory
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) #Set's directory where script is located
+getwd()
+
+# IMPORT CSV DATA
+CGL <- read.csv(here("data", "cgl_collapse_data_extract.csv"))
+
+# SUMMARY STATISTICS
+stargazer(CGL, type="text", digits=2)
+
+```
+
+```{r}
+# EXAMINE BALANCE IN COVARIATES
+# COVARIATE MEAN DIFFERENCES by DAPever
+m1 <- lm(formula = LME ~ DAPever, data=CGL)
+m2 <- lm(formula = genus ~ DAPever, data=CGL)
+m3 <- lm(formula = species ~ DAPever, data=CGL)
+se_models = starprep(m1, m2, m3, stat = c("std.error"), se_type = "HC2", alpha = 0.05)
+stargazer(m1, m2, m3, se = se_models, type="text")
+```
+
+```{r}
+# BOXPLOTS TO EXAMINE BALANCE IN COVARIATES
+ggplot(CGL, aes(x=as.factor(DAPever), y=LME)) + 
+  geom_boxplot(fill="cyan") + xlab("Ever Collapsed")
+
+ggplot(CGL, aes(x=as.factor(DAPever), y=genus)) + 
+  geom_boxplot(fill="cyan") + xlab("Ever Collapsed")
+
+ggplot(CGL, aes(x=as.factor(DAPever), y=species)) + 
+  geom_boxplot(fill="cyan") + xlab("Ever Collapsed")
+```
+
+0 means no ITQ, 1 means yes ITQ. For LME, The median value is around 35 for untreated ITQs; it is similar in ITQs for treated, but there is not as much mass around the median, which is problematic for comparing the 2. 
+
+Similar distributions for genus in treated and untreated fisheries, and same for species. 
+
+
+Below, we are applying ignorabilty, like applying the regression with the 12,000 veteran variables... but we are not interacting the variables here. 
+```{r}
+# BASIC OLS by DAPever -- THEN ADD INDICATORS FOR OTHER COVARIATES 
+# NOTE DO NOT INCLUDE SPECIES IN MODELS TO KEEP RUNNING TIME FAST
+mA <- lm(formula = collapse ~ DAPever, data=CGL)
+mB <- lm(formula = collapse ~ DAPever + as.factor(LME), data=CGL)
+mC <- lm(formula = collapse ~ DAPever + as.factor(LME) + as.factor(genus), data=CGL)
+se_models = starprep(mA, mB, mC, stat = c("std.error"), se_type = "HC2", alpha = 0.05)
+stargazer(mA, mB, mC, se = se_models, type="text", omit = "(LME)|(genus)|(species)")
+```
+DAPever in the output above represents the difference between mean of Y when D = 1 and mean of Y when D = 0. 
+
+
+```{r}
+# BASIC PROPENSITY SCORE --- THIS IS A TOY MODEL
+# ESTIMATE PROPENSITY SCORE MODEL AND PREDICT (EPS)
+ps_model <- glm(DAPever ~ LME + genus, family = binomial(), data = CGL)
+summary(ps_model)
+EPS <- predict(ps_model, type = "response") #here we are using the estimated 
+PS_WGT <- (CGL$DAPever/EPS) + ((1-CGL$DAPever)/(1-EPS)) #defining the weight for the regression analysis 
+
+
+# COLLECT ALL RELEVANT VARIABLES IN DATAFRAME
+DF <- data.frame(years = CGL$years, collapse = CGL$collapse, DAPever = CGL$DAPever, 
+                 LME = CGL$LME, genus = CGL$genus, species = CGL$species, EPS, PS_WGT)
+```
+
+```{r}
+# BOXPLOTS TO EXAMINE OVERLAP IN P-SCORE DISTRIBUTIONS
+ggplot(DF, aes(x=as.factor(DAPever), y=EPS)) + 
+  geom_boxplot(fill="cyan") + xlab("Ever Collapsed")
+```
+
+```{r}
+# WLS USING EPS WEIGHTS
+wls1 <- lm(formula = collapse ~ DAPever, data=DF, weights=PS_WGT) 
+wls2 <- lm(formula = collapse ~ DAPever + LME + genus, data=DF, weights=PS_WGT) #add linear controls for the characteristics 
+se_models = starprep(wls1, wls2, stat = c("std.error"), se_type = "HC2", alpha = 0.05)
+stargazer(wls1, wls2, se = se_models, type="text", omit = "(LME)|(genus)|(species)")
+```
+The adjustment almost doesn't change the output: tells us there is either no bias or the weights did not do much to control for bias. 
