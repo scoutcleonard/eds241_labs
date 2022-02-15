@@ -7,13 +7,10 @@ library(sandwich)
 library(lmtest)
 library(dplyr)
 library(lfe)
-
-
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) #Set's directory where script is located
-getwd()
+library(here)
 
 # IMPORT CSV DATA
-FULTON <- read.csv("FULTON.csv")%>%
+FULTON <- read.csv(here("data","FULTON.csv")) %>%
   mutate(log_tots = log(tots),
          log_price = log(pricelevel))
 
@@ -30,7 +27,8 @@ summary(ols)
 # FIRST_STAGE REGRESSION - JUST-IDENTIFIED MODEL
 fs1 <- lm(formula = log_price ~ windspd, data=FULTON)
 summary(fs1)
-
+# there is supply and demand happening here - when the price of fish goes up, the demand goes down
+#we know this from the log price value 
 
 # TSLS - JUST-IDENTIFIED MODEL
 tsls1 <- ivreg(log_tots ~ log_price | windspd, data = FULTON)
