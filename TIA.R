@@ -1,9 +1,3 @@
-#population average treatment effect: 
-## example: covid vaccine reduces prob of contracting covid by 25%. this 
-
-#population average treatment effect on the treated:
-## example: if ATT is .52, this means anyone who was treated has a 52% chance of getting covid? 
-
 library(MASS)
 library(ggplot2)
 library(vtable)
